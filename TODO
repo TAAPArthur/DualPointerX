@@ -1,0 +1,6 @@
+Have sane default config variables (not my refrences to One Piece)
+Load config variables from ~/.config/DualPointerX
+Rename DualWield.sh to dual-pointer-x
+Add help message
+Improve how we decide with devices to move to a master
+  One idea was to move devices there were moving to the master, but currently it only works on the new master (may be broken)
