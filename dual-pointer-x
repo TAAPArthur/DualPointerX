@@ -1,0 +1,394 @@
+#!/bin/bash
+#================================================================
+# HEADER
+#================================================================
+#%Usage: ${SCRIPT_NAME} [OPTION] [ACTION]
+#%A tool to easily create and manage multiple pointers via xinput (MPX)
+#%    
+#%
+#%Options:
+#%    -q, --quiet                   Don't display notifications
+#%    -m, --master                  set the master to move the target input devices to
+#%    -c, --no-create               When loading from the configFile, will not create & attach slaves to master automatically  
+#%    -f, --force-create            Create master even if no slaves are available
+#%    --no-load                     Do not load settings from file
+#%    --file                        Load/Save from/to this file
+#%    -h, --help                    Print this help
+#%    -v, --version                 Print script information
+#%
+#%Actions
+#%    -r, --reset                   Merge all auxiliary input back into the default master
+#%    -d, --dynamic                 Take all input devices that are currently being used and assignment them them to a given master or the next master in the configFile if master is not given
+#%    -l, --load                    Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed. This is the default option if no arguments are given
+#%    -s, --save                    Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed
+#%    --move masterName targets     TODO implement
+#%
+#%
+#%Examples:
+#%    ${SCRIPT_NAME} -s             #saves settings
+#%    ${SCRIPT_NAME} --master=myMaster -d             #Moves all active inputs to myMaster
+#%
+#================================================================
+#- IMPLEMENTATION
+#-    version         ${SCRIPT_NAME} (taaparthur.no-ip.org) 1.1.0
+#-    author          Arthur Williams
+#-    license         MIT
+#================================================================
+# END_OF_HEADER
+#================================================================
+
+
+#masters=("Wado Ichimonji" "Sandai Kitetsu" "Yubashiri" "Hana Arashi" "Shusui")
+
+declare -A devices
+declare -A knownSlaves
+
+#consts
+TYPE_MOUSE=1
+TYPE_KEYBOARD=2
+MATCH_NAME='([\w\/]+( [\w\/]+)*)'
+
+numberOfMasterDevices=$(xinput |grep -c "master pointer")
+##default settings
+quiet=false
+verbose=false
+createMasterOnLoad=1
+loadFromFile=1
+configFile="$HOME/.config/dualpointerx.conf"
+
+##global vars
+masterDevices=()
+listOfIDs=()
+
+# create config file if it does not exist
+if [[ ! -e "$configFile" ]]; then 
+    mkdir -p "$HOME/.config"
+    touch "$configFile"    
+fi
+
+
+load(){
+    
+    while IFS=$'\t' read -r -a masterDefaults
+    do
+        firstInput=1
+        masterDevices+=("$masterDefaults") #name
+        ## attach all specified slaves to master
+        if [[ $loadFromFile ]]; then
+            for i in ${devices[@:1]}; do 
+                knownSlaves[$i]=masterDefaults
+                id=getIdFromName "$i" && (! $createMasterOnLoad && ! $firstInput && createMaster "$masterDefaults") && attachSlaveToMaster "$id" "$masterDefaults"
+                firstInput=0
+            done
+        fi
+    done < "$configFile"
+}
+save(){
+    
+    declare -A mapMasterToId
+    currentMasters=()
+    
+    while IFS=$'\t' read -r -a masterInfo; do
+       currentMasters+=("$masterInfo")
+       mapMasterToId["${masterInfo[0]}"]="${masterInfo[1]}"
+    done < <(xinput |grep "\[master " |perl -lne 'print "$4\t$1" if /'"$MATCH_NAME"' (pointer|keyboard).*id=(\d*)/')
+    echo -n "" > $configFile
+    for i in "${currentMasters[@]}"; do 
+        printf "%s" "${mapMasterToId[$i]}" >>$configFile
+        while read -r slaveInfo; do
+            printf "\t%s" "$slaveInfo" >> $configFile
+        done < <( xinput |grep "\[slave " |perl -lne 'print "$1" if /'"$MATCH_NAME"'.*\('"$i"'\)/')
+        echo "" >> $configFile
+    done
+}
+
+isUnknownSlave(){
+    deviceName=$1
+    if [[ ${knownSlaves[deviceName]} ]]; then
+        return 1
+    else return 0
+    fi
+}
+getIdFromName(){
+    xinput list --name-only "$1" 
+}
+getDeviceType(){
+    deviceID="$1"
+    deviceName=$(getIdFromName "$deviceID" )
+    deviceInfo=$(xinput --list "$deviceID")
+    
+    type=0
+    if echo "$deviceInfo" |grep -q "Button"; then
+        type=$TYPE_MOUSE
+    elif echo "$deviceInfo" |grep -q "Key" ; then
+        type=$TYPE_KEYBOARD          
+    fi
+    
+    if [[ $deviceName != *"XTEST"* ]] && isUnknownSlave "$deviceName" && echo $deviceInfo |grep -q "slave"  ; then
+	    return $type
+    fi
+
+    return 0
+}
+
+attachSlaveToMaster(){
+    slave="$1"
+    master="$2"
+    echo "xinput reattach $slave $master"
+    xinput reattach "$slave" "$master"
+}
+dualWield() {
+	
+    miceToEnslave=()
+    keyboardsToEnslave=()
+    echo "Slaves: ${listOfIDs[@]} ${listOfIDs[0]}"
+    nonEmpty=""
+    for i in "${listOfIDs[@]}"; do
+        deviceId="$i"
+        getDeviceType "$deviceId"
+        type=$?
+        if type ; then 
+           nonEmpty=1
+           if [[ $type -eq $TYPE_MOUSE ]]; then
+               miceToEnslave+=("$deviceId");
+           elif [[ $type -eq $TYPE_KEYBOARD ]]; then
+               keyboardsToEnslave+=("$deviceId");
+           fi
+        fi                
+    done
+    echo $miceToEnslave
+    echo $keyboardsToEnslave
+    if [[ "$nonEmpty" ]]; then
+        targetMasterDevice="$(nextMaster)"
+        createMaster "$targetMasterDevice"
+        echo "new master $targetMasterDevice"
+        ## ataching slaves to masters
+        for device in "${miceToEnslave[@]}"; do
+            attachSlaveToMaster "$device" "$targetMasterDevice pointer"
+        done
+        for device in "${keyboardsToEnslave[@]}"; do
+            attachSlaveToMaster "$device" "$targetMasterDevice keyboard"
+        done
+    else 
+        echo "nothing to do"
+    fi
+}
+createMaster(){
+    if [[ ! -z $1 ]]; then 
+        xinput create-master "$1"
+    else 
+        echo "will not create master with blank name"
+        return 1
+    fi
+}
+
+loadCurrentSettings(){
+    if [[ "$numberOfMasterDevices" -ne 0 ]] ; then
+        while IFS=$'\t' read -r -a master
+        do
+            echo $master
+            masterDevices+=("$master")
+        done < <(xinput |grep "master pointer" |perl -lne 'print $1 if /(\w+( [A-Za-z]+)*) pointer.*/')
+    else 
+        masterDevices=("Virtual core")    
+    fi
+}
+singleWield() {
+    ! $quiet && notify "exiting dual wield mode"
+    loadCurrentSettings
+    master="$(xinput --list --id-only |head -n1)"
+	while IFS=$'\t' read -r -a deviceId; do
+	    if [[ "$deviceId" != "$master" ]];then
+    	        xinput remove-master "$deviceId" AttachToMaster "$master" #&>/dev/null
+	    fi
+	done < <(xinput |grep "master pointer" |perl -lne 'print $1 if /id=(\d*)/')
+}
+
+nextMaster() {
+    if [[ ! -z $nextMaster ]]; then
+       echo $nextMaster
+       return 0
+    fi
+    for name in "${masterDevices[@]:1}"; do
+        if ! xinput |grep "master pointer"|grep "$name" &>/dev/null; then 
+        	echo "$name"
+        	return 0;
+	    fi
+    done
+    echo "masterDevice$((numberOfMasterDevices+1))"
+return 0;
+}
+
+readAllIDs() {
+    read -r -a listOfIDs < <(xinput list --id-only | cut -d" " -f2)
+}
+readAllMovingIds() {
+    exitCode=1
+        
+    count="$(($count-1))"
+    while read -r deviceId; do
+        if read -t .2 < <(timeout .3 xinput test "$deviceId"); then  #if is moving/button click
+            listOfIDs+=("$deviceId")
+            echo "moving $deviceId"
+            exitCode=0
+        fi
+    done < <(xinput |grep "slave" |perl -lne 'print "$1" if /id=(\d*)/')
+    return $exitCode
+}
+
+
+dynamicAssigment(){
+    load
+    readAllMovingIds && dualWield
+    exit $?
+}
+defaultAssigment(){
+    readAllIDs
+    load
+    dualWield
+}
+reset(){
+    singleWield
+    exit $?
+}
+
+#main(){
+
+#    
+#	echo "$numberOfMasterDevices master pairs"
+#    ##TODO need help message (-h/--help) when given invalid args
+#    
+#    if [[ "$1" == "-s" || "$1" == "save" ]]; then
+#        save
+#    elif [[ "$1" == "-r" || "$1" == "refresh" ]]; then
+#		if [[ $numberOfMasterDevices -gt 1 ]]; then
+#			notify "reloading"
+#			load
+#		fi
+#    elif [[ "$1" == "--dynamic" ]]; then
+#            
+#    else 
+#            readAllIDs
+#        
+#        load
+#        if [ "$numberOfMasterDevices" -eq 1 ]; then
+#            dualWield
+#    	elif [[ "$1" == "poly" ]] || [[ "$1" == "polywield" ]]; then
+#			dualWield
+#    	else
+#    	    load false
+#    	    echo "${masterDevices[0]}"
+#            singleWield
+#        fi
+#    fi
+#}
+USAGE="USAGE: [OPTION] [ACTION]"
+SCRIPT_HEADSIZE=$(head -200 ${0} |grep -n "^# END_OF_HEADER" | cut -f1 -d:)
+SCRIPT_NAME="$(basename ${0})"
+
+  #== usage functions ==#
+usage() { printf "Usage: "; head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#+" | sed -e "s/^#+[ ]*//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g" ; }
+usagefull() { head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#[%+]" | sed -e "s/^#[%+-]//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g" ; }
+scriptinfo() { head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#-" | sed -e "s/^#-//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g"; }
+displayHelp(){
+    usagefull
+}
+
+version(){
+    #scriptinfo
+    echo 1.1.0
+}
+
+notify(){
+    ! $quiet && notify-send "$1"
+}
+
+#main "$@"
+
+
+optspec=":hvqpcrsm:d-:"
+if [[ ! "$@" ]]; then 
+    load
+    return $?
+fi
+while getopts "$optspec" optchar; do
+    case "${optchar}" in
+        -)
+            case "${OPTARG}" in
+                next-master)
+                    nextMaster
+                    ;;
+                file)
+                    configFile="${OPTARG[1]}"
+                    ;;
+                help)
+                    displayHelp
+                    ;;
+                version)
+                    version
+                    ;;
+                no-load)
+                    loadFromFile=0
+                    ;;
+                quiet)
+                    quiet=1
+                    ;;
+                no-create)
+                    createMasterOnLoad=0;
+                    ;;
+                master)
+                    nextMaster="${OPTARG[1]}"
+                    ;;
+                save)
+                    save
+                    ;;
+                reset)
+                    reset
+            		;;
+        		dynamic)
+                    dynamicAssigment
+                    ;;
+                *)
+                    if [ "$OPTERR" = 1 ] && [ "${optspec:0:1}" != ":" ]; then
+                        echo "Unknown option --${OPTARG}" >&2
+                    fi
+                    ;;
+            esac;;
+        p)
+            load
+            ;;
+        h)
+            displayHelp
+            exit 0
+            ;;
+        v)
+            version
+            ;;
+        q)
+            quiet=1
+            ;;
+        c)
+            createMasterOnLoad=0;
+            ;;
+        m)
+            nextMaster="${OPTARG}"
+            ;;
+        s)
+            save
+            ;;
+        r)
+            reset
+	        ;;
+        d)
+            dynamicAssigment
+            ;;
+        *)
+            if [ "$OPTERR" != 1 ] || [ "${optspec:0:1}" = ":" ]; then
+                echo "Non-option argument: '-${OPTARG}'" >&2
+            fi
+            displayHelp
+            ;;
+    esac
+done
+
+
