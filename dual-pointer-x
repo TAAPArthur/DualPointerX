@@ -303,7 +303,7 @@ notify(){
 }
 
 
-optspec=":hvqpcrsnm:d-:"
+optspec=":hvqpcrsnml:d-:"
 if [[ ! "$@" ]]; then 
     load
     exit $?
@@ -342,6 +342,9 @@ while getopts "$optspec" optchar; do
                     ;;
                 next)
                     moveUnknownsToNextMaster
+                    ;;
+                load)
+                    load
                     ;;
                 save)
                     save
@@ -386,6 +389,9 @@ while getopts "$optspec" optchar; do
             ;;
         i)
             ignoreKnownSlaves=1
+            ;;
+        l)
+            load
             ;;
         s)
             save
