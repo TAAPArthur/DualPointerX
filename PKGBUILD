@@ -2,7 +2,7 @@
 
 
 pkgname='dual-pointer-x'
-pkgver='1.1.1'
+pkgver='1.1.2'
 _language='en-US'
 pkgrel=1
 pkgdesc='Automate creating multiple mouse pointers'

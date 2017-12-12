@@ -21,6 +21,7 @@
 #%    -r, --reset                   Merge all auxiliary input back into the default master
 #%    -d, --dynamic                 Take all input devices that are currently being used and assignment them them to a given master or the next master in the configFile if master is not given
 #%    -l, --load                    Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed. This is the default option if no arguments are given
+#%    --resume                      The default action. Shorthand for ${SCRIPT_NAME} -c -l
 #%    -s, --save                    Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed
 #%    -n, --next-master             Assigns all unkown inputs to master
 #%    --reload                      Resets and load
@@ -33,7 +34,7 @@
 #%
 #================================================================
 #- IMPLEMENTATION
-#-    version         ${SCRIPT_NAME} (taaparthur.no-ip.org) 1.1.0
+#-    version         ${SCRIPT_NAME} (taaparthur.no-ip.org) 1.1.2
 #-    author          Arthur Williams
 #-    license         MIT
 #================================================================
@@ -67,15 +68,17 @@ if [[ ! -e "$configFile" ]]; then
     mkdir -p "$HOME/.config"
     touch "$configFile"    
 fi
-
-
+resume(){
+    load
+    exit $?
+}
 load(){
     
     while IFS=$'\t' read -r -a masterDefaults
     do
         listOfIDs=()
         createMaster=1
-        masterExists=1
+        masterExists=0
         masterDevices+=("$masterDefaults") #name
         xinput list --id-only "$masterDefaults pointer" &>/dev/null && createMaster=0 && masterExists=1
         
@@ -84,6 +87,7 @@ load(){
             for i in "${masterDefaults[@]:1}"; do
                 knownSlaves[$i]="$masterDefaults"
                 if [[ $createMaster -eq 1 && $createMasterOnLoad -eq 1 ]]; then 
+                    masterExists=1
                     createMaster "$masterDefaults" || masterExists=0
                 fi
                 
@@ -295,7 +299,7 @@ displayHelp(){
 
 version(){
     #scriptinfo
-    echo 1.1.0
+    echo 1.1.2
 }
 
 notify(){
@@ -304,10 +308,6 @@ notify(){
 
 
 optspec=":hvqpcrsnml:d-:"
-if [[ ! "$@" ]]; then 
-    load
-    exit $?
-fi
 while getopts "$optspec" optchar; do
     case "${optchar}" in
         -)
@@ -343,8 +343,12 @@ while getopts "$optspec" optchar; do
                 next)
                     moveUnknownsToNextMaster
                     ;;
+                resume)
+                    createMasterOnLoad=0;
+                    resume
+                    ;;
                 load)
-                    load
+                    resume
                     ;;
                 save)
                     save
@@ -391,7 +395,7 @@ while getopts "$optspec" optchar; do
             ignoreKnownSlaves=1
             ;;
         l)
-            load
+            resume
             ;;
         s)
             save
@@ -411,4 +415,4 @@ while getopts "$optspec" optchar; do
     esac
 done
 
-
+resume

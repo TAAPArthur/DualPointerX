@@ -47,6 +47,9 @@ Take all input devices that are currently being used and assignment them them to
 \fB\-l\fR, \fB\-\-load\fR
 Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed. This is the default option if no arguments are given
 .TP
+\fB\-\-resume\fR
+The default action. Shorthand for dual\-pointer\-x \fB\-c\fR \fB\-l\fR
+.TP
 \fB\-s\fR, \fB\-\-save\fR
 Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed
 .TP
@@ -65,3 +68,12 @@ dual\-pointer\-x \-s
 .TP
 dual\-pointer\-x \-\-master=myMaster \-d
 #Moves all active inputs to myMaster
+.PP
+xinput reattach 12 23
+xinput reattach 13 24
+xinput reattach 16 27
+xinput reattach 14 27
+xinput reattach 15 27
+xinput reattach 18 27
+xinput reattach 22 28
+xinput reattach 17 28
