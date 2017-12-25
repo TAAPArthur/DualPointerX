@@ -22,6 +22,6 @@ package() {
   mkdir -p "$pkgdir/usr/bin/"
   mkdir -p "$pkgdir/share/man/man1/"
   install -D -m 0755 "dual-pointer-x" "$pkgdir/usr/bin/"
-  install -D -m 0755 "dual-pointer-x.1" "$pkgdir/share/man/man1/"
+  install -D -m 0755 "dual-pointer-x.1" "$pkgdir/usr/local/share/man/man1/"
 
 }

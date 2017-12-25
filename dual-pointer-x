@@ -68,10 +68,13 @@ if [[ ! -e "$configFile" ]]; then
     mkdir -p "$HOME/.config"
     touch "$configFile"    
 fi
-resume(){
-    load
-    exit $?
-}
+
+
+
+
+
+
+########################################IO########################################
 load(){
     
     while IFS=$'\t' read -r -a masterDefaults
@@ -124,17 +127,19 @@ save(){
     done
 }
 
-ignoreSlaveDevice(){
-    deviceName=$1
-    #echo "${knownSlaves[$deviceName]}"
-    if [[ $deviceName == *"XTEST"* ]] || echo "$deviceInfo" |grep -q "master"  ; then
-        return 0
-    elif [[ "$ignoreKnownSlaves" -eq 1 && ${knownSlaves[$deviceName]} ]]; then
-        return 0
+####################################Read State##########################
+
+loadCurrentSettings(){
+    if [[ "$numberOfMasterDevices" -ne 0 ]] ; then
+        while IFS=$'\t' read -r -a master
+        do
+            masterDevices+=("$master")
+        done < <(xinput |grep "master pointer" |perl -lne 'print $1 if /(\w+( [A-Za-z]+)*) pointer.*/')
     else 
-        return 1
+        masterDevices=("Virtual core")    
     fi
 }
+
 getNameFromId(){
     xinput list --name-only "$1" 
 }
@@ -153,8 +158,37 @@ getDeviceType(){
     elif echo "$deviceInfo" |grep -q "KeyClass" ; then
         return $TYPE_KEYBOARD          
     fi
-    
+}
 
+readAllIDs() {
+    while read -r -a id; do
+        listOfIDs+=("$id")
+    done < <(xinput list --id-only)
+}
+readAllMovingIds() {
+    exitCode=1
+
+    while read -r deviceId; do
+        if read -t .2 < <(timeout .3 xinput test "$deviceId"); then  #if is moving/button click
+            listOfIDs+=("$deviceId")
+            ! $quiet && echo "moving $deviceId"
+            exitCode=0
+        fi
+    done < <(xinput |grep "slave" |perl -lne 'print "$1" if /id=(\d*)/')
+    return $exitCode
+}
+###############HELPER FUNCTIONS###########################################
+
+ignoreSlaveDevice(){
+    deviceName=$1
+    #echo "${knownSlaves[$deviceName]}"
+    if [[ $deviceName == *"XTEST"* ]] || echo "$deviceInfo" |grep -q "master"  ; then
+        return 0
+    elif [[ "$ignoreKnownSlaves" -eq 1 && ${knownSlaves[$deviceName]} ]]; then
+        return 0
+    else 
+        return 1
+    fi
 }
 
 attachSlaveToMaster(){
@@ -163,6 +197,41 @@ attachSlaveToMaster(){
     
     ! xinput list --short "$slaveID" |grep -q "$id" && echo "xinput reattach $slaveID $masterID"  &&  xinput reattach "$slaveID" "$masterID"
 }
+notify(){
+    ! $quiet && notify-send "$1"
+}
+
+createMaster(){
+    if [[ -z $1 ]]; then 
+        echo "will not create master with blank name"
+        return 1
+    elif xinput | grep -q "$1 pointer \\s*id=.*master" ; then
+        return 0
+    else 
+        xinput create-master "$1"
+    fi
+}
+
+nextMaster() {
+    if [[ ! -z $nextMaster ]]; then
+       echo "$nextMaster"
+       return 0
+    fi
+    for name in "${masterDevices[@]:1}"; do
+        if ! xinput |grep "master pointer"|grep "$name" &>/dev/null; then 
+        	echo "$name"
+        	return 0;
+	    fi
+    done
+    echo "masterDevice$((numberOfMasterDevices+1))"
+    return 0;
+}
+
+
+
+
+
+########################MODES################################
 dualWield() {
 	
     miceToEnslave=()
@@ -203,27 +272,9 @@ dualWield() {
         return 1
     fi
 }
-createMaster(){
-    if [[ -z $1 ]]; then 
-        echo "will not create master with blank name"
-        return 1
-    elif xinput | grep -q "$1 pointer \\s*id=.*master" ; then
-        return 0
-    else 
-        xinput create-master "$1"
-    fi
-}
 
-loadCurrentSettings(){
-    if [[ "$numberOfMasterDevices" -ne 0 ]] ; then
-        while IFS=$'\t' read -r -a master
-        do
-            masterDevices+=("$master")
-        done < <(xinput |grep "master pointer" |perl -lne 'print $1 if /(\w+( [A-Za-z]+)*) pointer.*/')
-    else 
-        masterDevices=("Virtual core")    
-    fi
-}
+
+
 singleWield() {
     ! $quiet && notify "exiting dual wield mode"
     #loadCurrentSettings
@@ -235,76 +286,52 @@ singleWield() {
 	done < <(xinput |grep "master pointer" |perl -lne 'print $1 if /id=(\d*)/')
 }
 
-nextMaster() {
-    if [[ ! -z $nextMaster ]]; then
-       echo "$nextMaster"
-       return 0
-    fi
-    for name in "${masterDevices[@]:1}"; do
-        if ! xinput |grep "master pointer"|grep "$name" &>/dev/null; then 
-        	echo "$name"
-        	return 0;
-	    fi
-    done
-    echo "masterDevice$((numberOfMasterDevices+1))"
-return 0;
+###################################COMMANDS#############################################
+#Commans can all be called directly and should exit on completion
+
+
+displayHelp(){
+    SCRIPT_HEADSIZE=$(head -200 ${0} |grep -n "^# END_OF_HEADER" | cut -f1 -d:)
+    SCRIPT_NAME="$(basename ${0})"
+    head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#[%+]" | sed -e "s/^#[%+-]//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g" ;
+    exit 0
 }
 
-readAllIDs() {
-    while read -r -a id; do
-        listOfIDs+=("$id")
-    done < <(xinput list --id-only)
+version(){
+    #scriptinfo
+    echo 1.1.2
+    exit 0
 }
-readAllMovingIds() {
-    exitCode=1
-
-    while read -r deviceId; do
-        if read -t .2 < <(timeout .3 xinput test "$deviceId"); then  #if is moving/button click
-            listOfIDs+=("$deviceId")
-            ! $quiet && echo "moving $deviceId"
-            exitCode=0
-        fi
-    done < <(xinput |grep "slave" |perl -lne 'print "$1" if /id=(\d*)/')
-    return $exitCode
+start(){
+    load
+    exit $?
 }
-
+resume(){
+    createMasterOnLoad=0;
+    load
+    exit $?
+}
 
 dynamicAssigment(){
     load
     readAllMovingIds && dualWield
     exit $?
 }
+reset(){
+    singleWield
+    exit $?
+}
 moveUnknownsToNextMaster(){
     ignoreKnownSlaves=1
-    
     load
     readAllIDs
     echo ${listOfIDs[@]}
     dualWield
-}
-reset(){
-    singleWield
+    exit $?
 }
 
-SCRIPT_HEADSIZE=$(head -200 ${0} |grep -n "^# END_OF_HEADER" | cut -f1 -d:)
-SCRIPT_NAME="$(basename ${0})"
 
-  #== usage functions ==#
-usage() { printf "Usage: "; head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#+" | sed -e "s/^#+[ ]*//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g" ; }
-usagefull() { head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#[%+]" | sed -e "s/^#[%+-]//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g" ; }
-scriptinfo() { head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#-" | sed -e "s/^#-//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g"; }
-displayHelp(){
-    usagefull
-}
 
-version(){
-    #scriptinfo
-    echo 1.1.2
-}
-
-notify(){
-    ! $quiet && notify-send "$1"
-}
 
 
 optspec=":hvqpcrsnml:d-:"
@@ -312,12 +339,8 @@ while getopts "$optspec" optchar; do
     case "${optchar}" in
         -)
             case "${OPTARG}" in
-                next-master)
-                    nextMaster
-                    ;;
-                master=*)
-                    val=${OPTARG#*=}
-                    nextMaster="$val"
+                dynamic)
+                    dynamicAssigment
                     ;;
                 file)
                     configFile="${OPTARG[1]}"
@@ -325,43 +348,45 @@ while getopts "$optspec" optchar; do
                 help)
                     displayHelp
                     ;;
-                version)
-                    version
-                    ;;
                 ignore-known-slaves)
                     ignoreKnownSlaves=1
-                    ;;
-                no-load)
-                    loadFromFile=0
-                    ;;
-                quiet)
-                    quiet=1
-                    ;;
-                no-create)
-                    createMasterOnLoad=0;
-                    ;;
-                next)
-                    moveUnknownsToNextMaster
-                    ;;
-                resume)
-                    createMasterOnLoad=0;
-                    resume
                     ;;
                 load)
                     resume
                     ;;
-                save)
-                    save
+                master=*)
+                    val=${OPTARG#*=}
+                    nextMaster="$val"
+                    ;;
+                next)
+                    moveUnknownsToNextMaster
+                    ;;
+                no-create)
+                    createMasterOnLoad=0;
+                    ;;
+                no-load)
+                    loadFromFile=0
+                    ;;
+                    
+                quiet)
+                    quiet=1
                     ;;
                 reload)
-                    reset
+                    singleWield
                     load
                     ;;
                 reset)
                     reset
             		;;
-        		dynamic)
-                    dynamicAssigment
+                resume)
+                    resume
+                    ;;
+                
+                save)
+                    save
+                    ;;
+                version)
+                    version
                     ;;
                 *)
                     if [ "$OPTERR" = 1 ] && [ "${optspec:0:1}" != ":" ]; then
@@ -374,7 +399,6 @@ while getopts "$optspec" optchar; do
             ;;
         h)
             displayHelp
-            exit 0
             ;;
         v)
             version
