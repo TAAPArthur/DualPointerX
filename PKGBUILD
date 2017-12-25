@@ -2,7 +2,7 @@
 
 
 pkgname='dual-pointer-x'
-pkgver='1.1.2'
+pkgver='1.1.3'
 _language='en-US'
 pkgrel=1
 pkgdesc='Automate creating multiple mouse pointers'
@@ -19,9 +19,13 @@ _srcDir="DualPointerX"
 package() {
 
   cd "$_srcDir"
+  pwd
   mkdir -p "$pkgdir/usr/bin/"
-  mkdir -p "$pkgdir/share/man/man1/"
+  echo "$pkgdir/usr/share/man/man1/"
+  mkdir -p "$pkgdir/usr/share/man/man1/"
+  echo "$pkgdir/usr/local/share/man/man1/"
   install -D -m 0755 "dual-pointer-x" "$pkgdir/usr/bin/"
-  install -D -m 0755 "dual-pointer-x.1" "$pkgdir/usr/local/share/man/man1/"
+  install -D -m 0755 "dual-pointer-x.1" "$pkgdir/usr/share/man/man1/"
+  mandb
 
 }
