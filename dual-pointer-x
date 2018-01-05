@@ -22,7 +22,7 @@
 #%    -d, --dynamic                 Take all input devices that are currently being used and assignment them them to a given master or the next master in the configFile if master is not given
 #%    -l, --load                    Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed. This is the default option if no arguments are given
 #%    --resume                      The default action. Shorthand for ${SCRIPT_NAME} -c -l
-#%    -s, --save                    Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed
+#%    --save                        Saves current settings to configFile
 #%    -n, --next-master             Assigns all unkown inputs to master
 #%    --reload                      Resets and load
 #%    --move masterName targets     TODO implement
@@ -381,7 +381,9 @@ while getopts "$optspec" optchar; do
                 resume)
                     resume
                     ;;
-                
+                start)
+                    start
+                    ;;
                 save)
                     save
                     ;;
@@ -422,7 +424,7 @@ while getopts "$optspec" optchar; do
             resume
             ;;
         s)
-            save
+            start
             ;;
         r)
             reset
