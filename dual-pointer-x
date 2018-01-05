@@ -8,7 +8,7 @@
 #%
 #%Options:
 #%    -q, --quiet                   Don't display notifications
-#%    -m, --master                  set the master to move the target input devices to
+#%    --master                  set the master to move the target input devices to
 #%    -c, --no-create               When loading from the configFile, will not create & attach slaves to master automatically  
 #%    -f, --force-create            Create master even if no slaves are available
 #%    --no-load                     Do not load settings from file
@@ -23,7 +23,7 @@
 #%    -l, --load                    Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed. This is the default option if no arguments are given
 #%    --resume                      The default action. Shorthand for ${SCRIPT_NAME} -c -l
 #%    --save                        Saves current settings to configFile
-#%    -n, --next-master             Assigns all unkown inputs to master
+#%    --next-master             Assigns all unkown inputs to master
 #%    --reload                      Resets and load
 #%    --move masterName targets     TODO implement
 #%
@@ -41,8 +41,6 @@
 # END_OF_HEADER
 #================================================================
 #MAN generated with help2man -No dual-pointer-x.1 "./dual-pointer-x";
-
-#masters=("Wado Ichimonji" "Sandai Kitetsu" "Yubashiri" "Hana Arashi" "Shusui")
 
 declare -A knownSlaves
 
@@ -329,12 +327,14 @@ moveUnknownsToNextMaster(){
     dualWield
     exit $?
 }
+edit(){
+    "$EDITOR" "$configFile"
+}
 
 
 
 
-
-optspec=":hvqpcrsnml:d-:"
+optspec=":ehvqpcrsnml:d-:"
 while getopts "$optspec" optchar; do
     case "${optchar}" in
         -)
@@ -411,14 +411,11 @@ while getopts "$optspec" optchar; do
         c)
             createMasterOnLoad=0;
             ;;
-        m)
-            nextMaster="${OPTARG}"
-            ;;
-        n)
-            moveUnknownsToNextMaster
-            ;;
         i)
             ignoreKnownSlaves=1
+            ;;
+        e)
+            edit
             ;;
         l)
             resume
@@ -441,4 +438,4 @@ while getopts "$optspec" optchar; do
     esac
 done
 
-resume
+#resume
