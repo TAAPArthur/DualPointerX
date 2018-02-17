@@ -8,19 +8,20 @@
 #%
 #%Options:
 #%    -q, --quiet                   Don't display notifications
-#%    --master                  set the master to move the target input devices to
+#%    --master                      set the master to move the target input devices to
+#%    -c                            Create saved master device as opposed to only adding if the master was already created
 #%    -f, --force-create            Create master even if no slaves are available
 #%    --no-load                     Do not load settings from file
 #%    --file                        Load/Save from/to this file
-#%    -h, --help                    Print this help
 #%    -i, --ignore-known-slaves     Ignores all slaves. This option is implicitly set when using -n
-#%    -v, --version                 Print script information
 #%
 #%Actions
+#%    -h, --help                    Print this help
+#%    -v, --version                 Print script information
 #%    -r, --reset                   Merge all auxiliary input back into the default master
 #%    -d, --dynamic                 Take all input devices that are currently being used and assignment them them to a given master or the next master in the configFile if master is not given
 #%    -s, --start                   Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed. 
-#%    --resume                      The default action. Shorthand for ${SCRIPT_NAME} -c -l; This is the default option if no arguments are given                 
+#%    --resume                      The default action. Shorthand for ${SCRIPT_NAME} -c --start; This is the default option if no arguments are given                 
 #%    --save                        Saves current settings to configFile
 #%    --next-master             Assigns all unkown inputs to master
 #%    --reload                      Resets and load
@@ -52,6 +53,7 @@ numberOfMasterDevices=$(xinput |grep -c "master pointer")
 ##default settings
 quiet=false
 forceCreate=0
+createSavedMasters=0
 loadFromFile=1
 ignoreKnownSlaves=0
 configFile="$HOME/.config/dualpointerx.conf"
@@ -82,7 +84,7 @@ load(){
         xinput list --id-only "$masterDefaults pointer" &>/dev/null && masterExists=1
         
         ## attach all specified slaves to master
-        if [[ $loadFromFile ]]; then
+        if [[ $loadFromFile && $createSavedMasters -eq 1 ]]; then
             if [[ $masterExists -ne 1 ]]; then 
                 if [[ $forceCreate -ne 1 ]]; then
                     for i in "${masterDefaults[@]:1}"; do
@@ -299,6 +301,7 @@ version(){
     exit 0
 }
 start(){
+    createSavedMasters=1
     load
     exit $?
 }
@@ -331,7 +334,7 @@ edit(){
 
 #set default action
 action="resume"
-optspec=":hvqfersl:d-:"
+optspec=":hvqcfersl:d-:"
 while getopts "$optspec" optchar; do
     case "${optchar}" in
         -)
@@ -404,6 +407,9 @@ while getopts "$optspec" optchar; do
             ;;
         q)
             quiet=1
+            ;;
+        c)
+            createSavedMasters=1
             ;;
         f)
             forceCreate=1;
