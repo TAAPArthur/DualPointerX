@@ -193,7 +193,7 @@ attachSlaveToMaster(){
     slaveID="$1"
     masterID="$2"
     
-    ! xinput list --short "$slaveID" |grep -q "$id" &&  xinput reattach "$slaveID" "$masterID"
+    ! xinput list --short "$slaveID" |grep -q "($id)]" &&  xinput reattach "$slaveID" "$masterID"
 }
 notify(){
     ! $quiet && notify-send "$1"
@@ -260,6 +260,7 @@ dualWield() {
         ## ataching slaves to masters
         id=$(getIdFromName "$targetMasterDevice pointer")
         for device in "${miceToEnslave[@]}"; do
+            echo "$device -> $id"
             attachSlaveToMaster "$device" "$id"
         done
         id=$(getIdFromName "$targetMasterDevice keyboard")
