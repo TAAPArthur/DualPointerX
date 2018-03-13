@@ -21,7 +21,7 @@
 #%    -r, --reset                   Merge all auxiliary input back into the default master
 #%    -d, --dynamic                 Take all input devices that are currently being used and assignment them them to a given master or the next master in the configFile if master is not given
 #%    -s, --start                   Restores settings from configFile by attaching all available slaves to the appropriate masters, creating them if needed. 
-#%    --resume                      The default action. Shorthand for ${SCRIPT_NAME} -c --start; This is the default option if no arguments are given                 
+#%    -l, --resume                      The default action. Shorthand for ${SCRIPT_NAME} -c --start; This is the default option if no arguments are given                 
 #%    --save                        Saves current settings to configFile
 #%    --next-master             Assigns all unkown inputs to master
 #%    --reload                      Resets and load
@@ -98,21 +98,22 @@ load(){
                     createMaster "$masterDefaults" || masterExists=0
                 fi
             fi
-            if [[ $masterExists -eq 1 ]]; then 
-                for i in "${masterDefaults[@]:1}"; do
-                
-                    knownSlaves[$i]="$masterDefaults"
-                    
-                    if [[ $masterExists -eq 1 ]]; then 
-                        #while we expect this to only return 1 value, if one slave's name is a prefix of the other then they will both appear
-                        while IFS=$'\t' read -r -a slaveID; do
-                            listOfIDs+=("$slaveID") 
-                        done < <(xinput |grep "$i" |perl -lne 'print "$1" if /.*id=(\d*).*slave/')
-                    fi
-                done
-                dualWield "$masterDefaults"
-            fi
         fi
+        if [[ $masterExists -eq 1 ]]; then 
+            for i in "${masterDefaults[@]:1}"; do
+            
+                knownSlaves[$i]="$masterDefaults"
+                
+                if [[ $masterExists -eq 1 ]]; then 
+                    #while we expect this to only return 1 value, if one slave's name is a prefix of the other then they will both appear
+                    while IFS=$'\t' read -r -a slaveID; do
+                        listOfIDs+=("$slaveID") 
+                    done < <(xinput |grep "$i" |perl -lne 'print "$1" if /.*id=(\d*).*slave/')
+                fi
+            done
+            dualWield "$masterDefaults"
+        fi
+        
     done < "$configFile"
     listOfIDs=()
 }
@@ -335,7 +336,7 @@ edit(){
 
 #set default action
 action="resume"
-optspec=":hvqcfersl:d-:"
+optspec=":hvqcfielsrd-:"
 while getopts "$optspec" optchar; do
     case "${optchar}" in
         -)
@@ -400,6 +401,7 @@ while getopts "$optspec" optchar; do
                     fi
                     ;;
             esac;;
+
         h)
             displayHelp
             ;;
