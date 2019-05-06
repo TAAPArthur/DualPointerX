@@ -1,3 +1,5 @@
+*This project is deprecated. The functionality has been absorbed into [MPXManager](https://github.com/TAAPArthur/MyPersonalXwindowManager)*
+
 # DualPointerX
 A tool to easily create and manage multiple pointers via xinput (MPX)
 
